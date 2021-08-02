@@ -119,7 +119,7 @@ class Conv2DBNBlock(tf.keras.layers.Layer):
       self._norm = tf.keras.layers.experimental.SyncBatchNormalization
     else:
       self._norm = tf.keras.layers.BatchNormalization
-    if use_explicit_padding:
+    if use_explicit_padding and kernel_size > 1:
       self._padding = 'VALID'
     else:
       self._padding = 'SAME'
@@ -148,7 +148,7 @@ class Conv2DBNBlock(tf.keras.layers.Layer):
     return dict(list(base_config.items()) + list(config.items()))
 
   def build(self, input_shape):
-    if self._use_explicit_padding:
+    if self._use_explicit_padding and self._kernel_size > 1:
       self._pad = nn_layers.FixedPadding((self._kernel_size, self._kernel_size))
     self._conv0 = tf.keras.layers.Conv2D(
         filters=self._filters,
@@ -170,7 +170,7 @@ class Conv2DBNBlock(tf.keras.layers.Layer):
     super(Conv2DBNBlock, self).build(input_shape)
 
   def call(self, inputs, training=None):
-    if self._use_explicit_padding:
+    if self._use_explicit_padding and self._kernel_size > 1:
       inputs = self._pad(inputs)
     x = self._conv0(inputs)
     if self._use_normalization:
@@ -250,10 +250,6 @@ class ResidualBlock(tf.keras.layers.Layer):
       self._norm = tf.keras.layers.experimental.SyncBatchNormalization
     else:
       self._norm = tf.keras.layers.BatchNormalization
-    if use_explicit_padding:
-      self._padding = 'VALID'
-    else:
-      self._padding = 'SAME'
     if tf.keras.backend.image_data_format() == 'channels_last':
       self._bn_axis = -1
     else:
@@ -274,14 +270,17 @@ class ResidualBlock(tf.keras.layers.Layer):
           axis=self._bn_axis,
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon)
-
+    
+    conv1_padding = 'same'
+    # explicit padding here is added for centernet
     if self._use_explicit_padding:
-      self._pad = nn_layers.FixedPadding((self._kernel_size, self._kernel_size))
+      self._pad = nn_layers.FixedPadding((3, 3))
+      conv1_padding = 'valid'
     self._conv1 = tf.keras.layers.Conv2D(
         filters=self._filters,
         kernel_size=3,
         strides=self._strides,
-        padding=self._padding,
+        padding=conv1_padding,
         use_bias=False,
         kernel_initializer=self._kernel_initializer,
         kernel_regularizer=self._kernel_regularizer,
